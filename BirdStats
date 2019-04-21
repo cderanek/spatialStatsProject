@@ -1,0 +1,63 @@
+---
+title: "Bird_Project"
+author: "Alicia Pentico"
+date: "April 21, 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+library(rgdal) # Provides links to the 'Geospatial' Data Abstraction Library ('GDAL') and access to projection/transformation operations from the 'PROJ.4' library.
+library(sp) # Classes and methods for spatial data
+library(spdep) # for modeling of spatial dependencies
+library(maptools) # provides various mapping functions
+library(RANN) # for nearest neighbor calculations
+```
+
+### READING IN DATA
+```{r}
+captureBirds<-read.csv("balbina_understory_birds_captures.csv", header = TRUE)
+birdInfo<-read.csv("balbina_understory_birds_taxonomy_traits.csv", header = TRUE)
+environment<-read.csv("balbina_environmental_variables.csv", header = TRUE)
+str(captureBirds)
+```
+
+
+###ABUNDANCE BY LOCATION
+```{r}
+#str(captureBirds)
+noRecaptures <- subset(captureBirds, captureBirds$new.individual == "yes")
+
+perLocation<- as.data.frame(table(noRecaptures$site))
+perLocation$longitude<- environment$longitude.WGS84
+perLocation$latitude<- environment$latitude.WGS84
+
+names(perLocation)<- c("site", "abundance", "longitude", "latitude")
+str(perLocation)
+
+
+for (i in perLocation$site){
+  set<-subset(noRecaptures, sites == i)
+  byLocation <- as.data.frame(table(set$species))
+  length()
+}
+
+```
+
+
+###DIVERSITY BY LOCATION
+```{r}
+
+
+```
+
+
+###DIET BY LOCATION
+```{r}
+
+
+```
