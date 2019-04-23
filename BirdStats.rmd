@@ -65,8 +65,84 @@ perLocation$speciesNamesL<- speciesNamesBySite
 
 
 
-###KRIGING ABUNDANCE, ETC MAPS - TODO ALICIA
+###IDW ABUNDANCE, SPECIES RICHNESS - TODO ALICIA
+
+Creating a spatial points data frame
 ```{r}
+### Converting data into a spatial points data frame
+perLocation.spdf <- perLocation
+coordinates(perLocation.spdf) <- ~ longitude + latitude ##(remember that in R longitude is assigned to x-axis and latitude to y-axis)
+class(perLocation.spdf)
+bbox(perLocation.spdf)
+```
+
+#Abundance 
+Data Transformations
+```{r}
+### Examining normality of the abundance and selected Sqrt transformation
+hist(perLocation.spdf@data$abundance) ## Note abundance is not normally distributed. Should transform dataset
+qqnorm(perLocation.spdf@data$abundance)
+qqline(perLocation.spdf@data$abundance)
+
+hist(log(perLocation.spdf@data$abundance)) ## Log Transformation --> still not great
+qqnorm(log(perLocation.spdf@data$abundance))
+qqline(log(perLocation.spdf@data$abundance))
+
+hist((sqrt(perLocation.spdf@data$abundance))) ## Sqrt Transformation ---> Transformation I am using
+qqnorm((sqrt(perLocation.spdf@data$abundance)))
+qqline((sqrt(perLocation.spdf@data$abundance)))
+
+hist(1/(perLocation.spdf@data$abundance)) ## 1/y Transformation --> real bad
+qqnorm(1/(perLocation.spdf@data$abundance)) 
+qqline(1/(perLocation.spdf@data$abundance))
+
+perLocation.spdf@data$transformedAbundance <- sqrt(perLocation.spdf@data$abundance)
+```
+Inverse Distance Weighted
+
+```{r}
+x.range <- as.numeric(c(-60, -59.15671))  # min/max longitude of the interpolation area
+y.range <- as.numeric(c(-1.97378, -1.32884))  # min/max latitude of the interpolation area
+
+
+grd <- expand.grid(x = seq(from = x.range[1], to = x.range[2], by = 0.001), y = seq(from = y.range[1], 
+    to = y.range[2], by = 0.001))  # expand points to grid
+coordinates(grd) <- ~x + y
+gridded(grd) <- TRUE
+plot(grd, cex = 1.5, col = "grey") 
+plot(perLocation.spdf, add=TRUE, pch = 1, col = "red", cex = 1)
+
+
+idw <- gstat::idw(formula = perLocation.spdf@data$transformedAbundance ~ 1, locations = perLocation.spdf, newdata = grd, idp=2.0) 
+plot(idw)
+
+```
+
+
+#Species Richness 
+Transformation
+```{r}
+### Examining normality of the abundance and selected Sqrt transformation
+hist(perLocation.spdf@data$speciesRichness) ## Note abundance is not normally distributed. Should transform dataset
+qqnorm(perLocation.spdf$abundance)
+
+hist(log(perLocation.spdf$abundance)) ## Log Transformation --> still not great
+qqnorm(log(perLocation.spdf$abundance)) 
+
+hist(sqrt(perLocation.spdf$abundance)) ## Sqrt Transformation ---> Transformation I am using
+qqnorm(sqrt(perLocation.spdf$abundance)) 
+
+hist(1/(perLocation.spdf$abundance)) ## 1/y Transformation --> real bad
+qqnorm(1/(perLocation.spdf$abundance)) 
+
+perLocation.spdf@data$transformedRichness <- sqrt(perLocation.spdf@data$speciesRichness)
+```
+
+
+IDW
+```{r}
+idw <- gstat::idw(formula = perLocation.spdf@data$transformedRichness ~ 1, locations = perLocation.spdf, newdata = grd, idp=2.0) 
+plot(idw)
 
 ```
 
