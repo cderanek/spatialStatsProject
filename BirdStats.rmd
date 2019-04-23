@@ -16,6 +16,7 @@ library(sp) # Classes and methods for spatial data
 library(spdep) # for modeling of spatial dependencies
 library(maptools) # provides various mapping functions
 library(RANN) # for nearest neighbor calculations
+library(gstat)
 ```
 
 ### READING IN DATA
@@ -65,7 +66,7 @@ perLocation$speciesNamesL<- speciesNamesBySite
 
 
 
-###IDW ABUNDANCE, SPECIES RICHNESS - TODO ALICIA
+###IDW ABUNDANCE, SPECIES RICHNESS
 
 Creating a spatial points data frame
 ```{r}
