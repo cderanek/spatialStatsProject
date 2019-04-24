@@ -10,6 +10,12 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 
+Remember that diet is small proxy. Some birds could eat more than others
+Moran's I to tell if birds are clustered. 
+Diversity analysis?
+Add jackknife Analysis
+Spatial regression model could have seasonality as factors.
+
 ```{r}
 library(rgdal) # Provides links to the 'Geospatial' Data Abstraction Library ('GDAL') and access to projection/transformation operations from the 'PROJ.4' library.
 library(sp) # Classes and methods for spatial data
@@ -17,6 +23,8 @@ library(spdep) # for modeling of spatial dependencies
 library(maptools) # provides various mapping functions
 library(RANN) # for nearest neighbor calculations
 library(gstat)
+library(base)
+
 ```
 
 ### READING IN DATA
@@ -24,12 +32,10 @@ library(gstat)
 captureBirds<-read.csv("balbina_understory_birds_captures.csv", header = TRUE)
 birdInfo<-read.csv("balbina_understory_birds_taxonomy_traits.csv", header = TRUE)
 environment<-read.csv("balbina_environmental_variables.csv", header = TRUE)
-str(captureBirds)
 ```
 
 ###DATA FORMATTING
 ```{r}
-#str(captureBirds)
 noRecaptures <- subset(captureBirds, captureBirds$new.individual == "yes")
 
 perLocation<- as.data.frame(table(noRecaptures$site))
@@ -44,13 +50,8 @@ str(perLocation)
 speciesRichnessBySite=vector('integer',length=length(perLocation$site))
 speciesNamesBySite=vector('list',length=length(perLocation$site))
 
-# create matrix to pass into species accumulation curve formula
-allSpeciesNames = sort(unique(noRecaptures$species),return=TRUE)
-specAccumDF <- data.frame(matrix(ncol = length(allSpeciesNames), nrow = length(perLocation$site)))
-colnames(specAccumDF) <- allSpeciesNames
-row.names(specAccumDF) <- perLocation$site
-
 # get number of species at each site, list of species at each site
+# TODO FORMAT SUCH THAT WE MAKE READY FOR SPEC ACCUM - CARISSA TASK
 for (i in 1:length(perLocation$site)){
   siteName = perLocation$site[i]
   
@@ -61,11 +62,14 @@ for (i in 1:length(perLocation$site)){
   
   # add speciesRichness to vector
   speciesRichnessBySite[i] = sum(speciesFoundatSite)
-  speciesNamesBySite[i] = list(as.character(byLocation$Var1[speciesFoundatSite]))
   
-  # update specAccumDF
-  byLocation[order(byLocation$Var1),] #makes sure things get inputted in correct order
-  specAccumDF[i,] = byLocation$Freq
+  speciesFreqs <- list()
+  for (j in 1:length(byLocation$Var1)){
+    if(byLocation$Freq[j] != 0){
+      speciesFreqs[[as.character(byLocation$Var1[j])]] = byLocation$Freq[j]
+    }
+  }
+  speciesNamesBySite[[i]] = speciesFreqs
   
 }
 
@@ -76,7 +80,7 @@ perLocation$speciesNamesL<- speciesNamesBySite
 
 
 
-###IDW ABUNDANCE, SPECIES RICHNESS
+###IDW ABUNDANCE, SPECIES RICHNESS - TODO ALICIA
 
 Creating a spatial points data frame
 ```{r}
@@ -158,17 +162,94 @@ plot(idw)
 ```
 
 
-###EXAMPLE FOR SCPEC ACCUM
+###DIET ANALYSES
+
+Data Wrangling
 ```{r}
-library(vegan)
-#data("BCI")
-# learned that for specaccum function, we pass in dataframe whose cols are species names and rows are incidents, each cell has the count of species@thatincidence
+dietL <- c("diet.inv", "diet.vend", "diet.vect", "diet.vfish","diet.vunk","diet.fruit","diet.nect","diet.seed","diet.planto")
+dietByRegion <- matrix(1:342, nrow = 38, ncol = 9)
+colnames(dietByRegion) <- dietL
+
+for (i in 1:38){ #num rows is each location
+  for (j in 1:9){ #num cols is each diet type
+    
+    food = birdInfo[,dietL[j]] #Vector of particular Diet
+    
+    sumDiet <- 0
+    individualCount <- 0
+    
+    birdsAtSite <- perLocation$speciesNamesL[[i]]
+    birdNames = names(birdsAtSite)
+    
+    for (k in 1:length(birdNames)){
+      bird = birdNames[k]
+      numBirds = birdsAtSite[[bird]]
+      
+      individualCount <- individualCount+numBirds
+      
+      birdLocation = match(bird, birdInfo$birdlife.2016)
+      if (is.na(birdLocation)){
+        birdLocation = match(bird, birdInfo$cbro.2015)
+      }
+      else if (is.na(birdLocation)){
+        birdLocation = match(bird, birdInfo$wilman.2014)
+      }
+      foodEaten = food[birdLocation] #Perent of Diet for that particular bird
+
+      sumDiet <- sumDiet + (numBirds * foodEaten)
+      
+    }
+    
+    dietByRegion[i,j] = sumDiet/ (100*individualCount)
+  }
+}
 
 ```
 
 
-###DIET BY LOCATION - MAKE KRIGING BY DIETS, THINK OF SOME ANALYSIS USING MORE DETAILED DIET NUMBERS
+###Species Accumulation
 ```{r}
+#str(captureBirds)
+noRecaptures <- subset(captureBirds, captureBirds$new.individual == "yes")
 
+perLocation<- as.data.frame(table(noRecaptures$site))
+perLocation$longitude<- environment$longitude.WGS84
+perLocation$latitude<- environment$latitude.WGS84
+perLocation$coverage<- environment$forest.cover.200
 
+names(perLocation)<- c("site", "abundance", "longitude", "latitude","coverage")
+str(perLocation)
+
+# create vectors to hold species richness and names to later add as cols to perLocation
+speciesRichnessBySite=vector('integer',length=length(perLocation$site))
+speciesNamesBySite=vector('list',length=length(perLocation$site))
+
+# create matrix to pass into species accumulation curve formula
+allSpeciesNames = sort(unique(noRecaptures$species),return=TRUE)
+specAccumDF <- data.frame(matrix(ncol = length(allSpeciesNames), nrow = length(perLocation$site)))
+colnames(specAccumDF) <- allSpeciesNames
+row.names(specAccumDF) <- perLocation$site
+
+# get number of species at each site, list of species at each site
+for (i in 1:length(perLocation$site)){
+  siteName = perLocation$site[i]
+  
+  # operations to get T/F list of species at site
+  set<-subset(noRecaptures, site == siteName)
+  byLocation <- as.data.frame(table(set$species))
+  speciesFoundatSite = (byLocation$Freq != 0)
+  
+  # add speciesRichness to vector
+  speciesRichnessBySite[i] = sum(speciesFoundatSite)
+  speciesNamesBySite[i] = list(as.character(byLocation$Var1[speciesFoundatSite]))
+  
+  # update specAccumDF
+  byLocation[order(byLocation$Var1),] #makes sure things get inputted in correct order
+  specAccumDF[i,] = byLocation$Freq
+  
+}
+
+# add species richness and names to perLocation
+perLocation$speciesRichness<- speciesRichnessBySite
+perLocation$speciesNamesL<- speciesNamesBySite
 ```
