@@ -44,8 +44,13 @@ str(perLocation)
 speciesRichnessBySite=vector('integer',length=length(perLocation$site))
 speciesNamesBySite=vector('list',length=length(perLocation$site))
 
+# create matrix to pass into species accumulation curve formula
+allSpeciesNames = sort(unique(noRecaptures$species),return=TRUE)
+specAccumDF <- data.frame(matrix(ncol = length(allSpeciesNames), nrow = length(perLocation$site)))
+colnames(specAccumDF) <- allSpeciesNames
+row.names(specAccumDF) <- perLocation$site
+
 # get number of species at each site, list of species at each site
-# TODO FORMAT SUCH THAT WE MAKE READY FOR SPEC ACCUM - CARISSA TASK
 for (i in 1:length(perLocation$site)){
   siteName = perLocation$site[i]
   
@@ -57,6 +62,11 @@ for (i in 1:length(perLocation$site)){
   # add speciesRichness to vector
   speciesRichnessBySite[i] = sum(speciesFoundatSite)
   speciesNamesBySite[i] = list(as.character(byLocation$Var1[speciesFoundatSite]))
+  
+  # update specAccumDF
+  byLocation[order(byLocation$Var1),] #makes sure things get inputted in correct order
+  specAccumDF[i,] = byLocation$Freq
+  
 }
 
 # add species richness and names to perLocation
