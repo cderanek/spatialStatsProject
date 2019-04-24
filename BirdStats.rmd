@@ -253,3 +253,38 @@ for (i in 1:length(perLocation$site)){
 perLocation$speciesRichness<- speciesRichnessBySite
 perLocation$speciesNamesL<- speciesNamesBySite
 ```
+
+###BASEMAPS
+```{r}
+library(leaflet)
+medLong = median(perLocation.spdf@coords[,1])
+medLat = median(perLocation.spdf@coords[,2])
+
+abundanceVals=sort(perLocation.spdf@data$abundance)
+lowerQuarterAbundance = abundanceVals[floor(length(abundanceVals)/4)]
+upperQuarterAbundance = abundanceVals[length(abundanceVals)-floor(length(abundanceVals)/4)]
+
+getColor <- function(df) {
+  sapply(df$abundance, function(abundance) {
+  if(abundance <= lowerQuarterAbundance) {
+    "red"
+  } else if(abundance <= upperQuarterAbundance) {
+    "orange"
+  } else {
+    "green"
+  } })
+}
+
+icons <- awesomeIcons(
+  icon = 'ios-close',
+  iconColor = 'black',
+  library = 'ion',
+  markerColor = getColor(perLocation.spdf@data)
+)
+
+
+# draw map
+m = leaflet(perLocation.spdf) %>% setView(lng = medLong, lat = medLat, zoom = 10)
+m %>% addTiles() %>% addAwesomeMarkers(icon=icons, label = ~as.character(abundance), popup=~as.character(site))
+
+```
