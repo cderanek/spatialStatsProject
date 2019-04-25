@@ -137,18 +137,22 @@ plot(idw)
 #Species Richness 
 Transformation
 ```{r}
-### Examining normality of the abundance and selected Sqrt transformation
-hist(perLocation.spdf@data$speciesRichness) ## Note abundance is not normally distributed. Should transform dataset
-qqnorm(perLocation.spdf$abundance)
+### Examining normality of the species richness and selected Sqrt transformation
+hist(perLocation.spdf@data$speciesRichness)
+qqnorm(perLocation.spdf$speciesRichness)
+qqline(perLocation.spdf$speciesRichness)
 
-hist(log(perLocation.spdf$abundance)) ## Log Transformation --> still not great
-qqnorm(log(perLocation.spdf$abundance)) 
+hist(log(perLocation.spdf$speciesRichness)) 
+qqnorm(log(perLocation.spdf$speciesRichness)) 
+qqline(log(perLocation.spdf$speciesRichness))
 
-hist(sqrt(perLocation.spdf$abundance)) ## Sqrt Transformation ---> Transformation I am using
-qqnorm(sqrt(perLocation.spdf$abundance)) 
+hist(sqrt(perLocation.spdf$speciesRichness)) 
+qqnorm(sqrt(perLocation.spdf$speciesRichness)) 
+qqline(sqrt(perLocation.spdf$speciesRichness))
 
-hist(1/(perLocation.spdf$abundance)) ## 1/y Transformation --> real bad
-qqnorm(1/(perLocation.spdf$abundance)) 
+hist(1/(perLocation.spdf$speciesRichness)) 
+qqnorm(1/(perLocation.spdf$speciesRichness)) 
+qqline(1/(perLocation.spdf$speciesRichness))
 
 perLocation.spdf@data$transformedRichness <- sqrt(perLocation.spdf@data$speciesRichness)
 ```
@@ -205,7 +209,333 @@ for (i in 1:38){ #num rows is each location
 }
 
 ```
+Separating by Diet Type
+```{r}
+diet.inv <- dietByRegion[,1]
+diet.vend <- dietByRegion[,2]
+diet.vect <- dietByRegion[,3]
+diet.vfishd <- dietByRegion[,4]
+diet.vunk <- dietByRegion[,5]
+diet.fruit <- dietByRegion[,6]
+diet.nect <- dietByRegion[,7]
+diet.seed <- dietByRegion[,8]
+diet.planto <- dietByRegion[,9]
+```
 
+#DIET.INV
+TRANSFORMATIONS
+```{r}
+
+hist(diet.inv) 
+qqnorm(diet.inv)
+qqline(diet.inv)
+
+hist(log(diet.inv))
+qqnorm(log(diet.inv)) 
+qqline(log(diet.inv))
+
+hist(sqrt(diet.inv))
+qqnorm(sqrt(diet.inv)) 
+qqline(sqrt(diet.inv))
+
+hist(1/(diet.inv)) 
+qqnorm(1/(diet.inv)) 
+qqline(1/(diet.inv))
+
+
+### UNTRANSFORMED DIET IS BEST FOR DIET.INV
+perLocation.spdf@data$diet.inv <- diet.inv
+```
+IDW
+```{r}
+idw <- gstat::idw(formula = perLocation.spdf@data$diet.inv ~ 1, locations = perLocation.spdf, newdata = grd, idp=2.0) 
+plot(idw)
+
+```
+
+
+#DIET.VEND 
+TRANSFORMATIONS
+```{r}
+hist(diet.vend) 
+qqnorm(diet.vend)
+qqline(diet.vend)
+
+#hist(log(diet.vend)) 
+#qqnorm(log(diet.vend)) 
+#qqline(log(diet.vend))
+
+hist(sqrt(diet.vend))
+qqnorm(sqrt(diet.vend)) 
+qqline(sqrt(diet.vend))
+
+hist(asin(sqrt(diet.vend)))
+qqnorm(asin(sqrt(diet.vend)))
+qqline(asin(sqrt(diet.vend)))
+
+#hist(1/(diet.vend)) 
+#qqnorm(1/(diet.vend)) 
+#qqline(1/(diet.vend))
+
+
+### UNTRANSFORMED DIET IS BEST FOR diet.vend <---- STILL NOT GREAT THOUGH
+perLocation.spdf@data$diet.vend <- diet.vend
+```
+IDW
+```{r}
+idw <- gstat::idw(formula = perLocation.spdf@data$diet.vend ~ 1, locations = perLocation.spdf, newdata = grd, idp=2.0) 
+plot(idw)
+
+```
+
+
+#DIET.VECT 
+TRANSFORMATIONS
+```{r}
+hist(diet.vect) 
+qqnorm(diet.vect)
+qqline(diet.vect)
+
+#hist(log(diet.vect)) 
+#qqnorm(log(diet.vect)) 
+#qqline(log(diet.vect))
+
+hist(sqrt(diet.vect))
+qqnorm(sqrt(diet.vect)) 
+qqline(sqrt(diet.vect))
+
+hist(asin(sqrt(diet.vect)))
+qqnorm(asin(sqrt(diet.vect)))
+qqline(asin(sqrt(diet.vect)))
+
+#hist(1/(diet.vect)) 
+#qqnorm(1/(diet.vect)) 
+#qqline(1/(diet.vect))
+
+
+### UNTRANSFORMED DIET IS BEST FOR diet.vect <---- STILL NOT GREAT THOUGH
+perLocation.spdf@data$diet.vect <- diet.vect
+```
+IDW
+```{r}
+idw <- gstat::idw(formula = perLocation.spdf@data$diet.vect ~ 1, locations = perLocation.spdf, newdata = grd, idp=2.0) 
+plot(idw)
+
+```
+
+
+#DET.VFISHD 
+TRANSORMATIONS
+```{r}
+### Examining normality of the abundance and selected Sqrt transformation
+hist(diet.vfishd) 
+qqnorm(diet.vfishd)
+qqline(diet.vfishd)
+
+#hist(log(diet.vfishd)) 
+#qqnorm(log(diet.vfishd)) 
+#qqline(log(diet.vfishd))
+
+hist(sqrt(diet.vfishd))
+qqnorm(sqrt(diet.vfishd)) 
+qqline(sqrt(diet.vfishd))
+
+hist(asin(sqrt(diet.vfishd)))
+qqnorm(asin(sqrt(diet.vfishd)))
+qqline(asin(sqrt(diet.vfishd)))
+
+#hist(1/(diet.vfishd)) 
+#qqnorm(1/(diet.vfishd)) 
+#qqline(1/(diet.vfishd))
+
+
+### UNTRANSFORMED DIET IS BEST FOR diet.vfishd <---- STILL NOT GREAT THOUGH
+perLocation.spdf@data$diet.vfishd <- diet.vfishd
+```
+IDW
+```{r}
+idw <- gstat::idw(formula = perLocation.spdf@data$diet.vfishd ~ 1, locations = perLocation.spdf, newdata = grd, idp=2.0) 
+plot(idw)
+
+```
+
+
+#DIET.VUNK 
+TRANSFORMATIONS
+```{r}
+### Examining normality of the abundance and selected Sqrt transformation
+hist(diet.vunk) 
+qqnorm(diet.vunk)
+qqline(diet.vunk)
+
+#hist(log(diet.vunk)) 
+#qqnorm(log(diet.vunk)) 
+#qqline(log(diet.vunk))
+
+hist(sqrt(diet.vunk))
+qqnorm(sqrt(diet.vunk)) 
+qqline(sqrt(diet.vunk))
+
+hist(asin(sqrt(diet.vunk)))
+qqnorm(asin(sqrt(diet.vunk)))
+qqline(asin(sqrt(diet.vunk)))
+
+#hist(1/(diet.vunk)) 
+#qqnorm(1/(diet.vunk)) 
+#qqline(1/(diet.vunk))
+
+
+### UNTRANSFORMED DIET IS BEST FOR diet.vunk <---- STILL NOT GREAT THOUGH
+perLocation.spdf@data$diet.vunk <- diet.vunk
+```
+IDW
+```{r}
+idw <- gstat::idw(formula = perLocation.spdf@data$diet.vunk ~ 1, locations = perLocation.spdf, newdata = grd, idp=2.0) 
+plot(idw)
+
+```
+
+
+#DIET.FRUIT 
+TRANSFORMATIONS
+```{r}
+### Examining normality of the abundance and selected Sqrt transformation
+hist(diet.fruit) 
+qqnorm(diet.fruit)
+qqline(diet.fruit)
+
+#hist(log(diet.fruit)) 
+#qqnorm(log(diet.fruit)) 
+#qqline(log(diet.fruit))
+
+hist(sqrt(diet.fruit))
+qqnorm(sqrt(diet.fruit)) 
+qqline(sqrt(diet.fruit))
+
+hist(asin(sqrt(diet.fruit)))
+qqnorm(asin(sqrt(diet.fruit)))
+qqline(asin(sqrt(diet.fruit)))
+
+#hist(1/(diet.fruit)) 
+#qqnorm(1/(diet.fruit)) 
+#qqline(1/(diet.fruit))
+
+
+### UNTRANSFORMED DIET IS BEST FOR diet.fruit <---- STILL NOT GREAT THOUGH
+perLocation.spdf@data$diet.fruit <- diet.fruit
+```
+IDW
+```{r}
+idw <- gstat::idw(formula = perLocation.spdf@data$diet.fruit ~ 1, locations = perLocation.spdf, newdata = grd, idp=2.0) 
+plot(idw)
+
+```
+
+
+#DIET.NECT 
+TRANSFORMATIONS
+```{r}
+### Examining normality of the abundance and selected Sqrt transformation
+hist(diet.nect) 
+qqnorm(diet.nect)
+qqline(diet.nect)
+
+#hist(log(diet.nect)) 
+#qqnorm(log(diet.nect)) 
+#qqline(log(diet.nect))
+
+hist(sqrt(diet.nect))
+qqnorm(sqrt(diet.nect)) 
+qqline(sqrt(diet.nect))
+
+hist(asin(sqrt(diet.nect)))
+qqnorm(asin(sqrt(diet.nect)))
+qqline(asin(sqrt(diet.nect)))
+
+#hist(1/(diet.nect)) 
+#qqnorm(1/(diet.nect)) 
+#qqline(1/(diet.nect))
+
+
+### UNTRANSFORMED DIET IS BEST FOR diet.nect <---- STILL NOT GREAT THOUGH
+perLocation.spdf@data$diet.nect <- diet.nect
+```
+IDW
+```{r}
+idw <- gstat::idw(formula = perLocation.spdf@data$diet.nect ~ 1, locations = perLocation.spdf, newdata = grd, idp=2.0) 
+plot(idw)
+
+```
+
+
+#DIET.SEED 
+TRANSFORMATIONS
+```{r}
+### Examining normality of the abundance and selected Sqrt transformation
+hist(diet.seed) 
+qqnorm(diet.seed)
+qqline(diet.seed)
+
+#hist(log(diet.seed)) 
+#qqnorm(log(diet.seed)) 
+#qqline(log(diet.seed))
+
+hist(sqrt(diet.seed))
+qqnorm(sqrt(diet.seed)) 
+qqline(sqrt(diet.seed))
+
+hist(asin(sqrt(diet.seed)))
+qqnorm(asin(sqrt(diet.seed)))
+qqline(asin(sqrt(diet.seed)))
+
+#hist(1/(diet.seed)) 
+#qqnorm(1/(diet.seed)) 
+#qqline(1/(diet.seed))
+
+
+### SQRT DIET IS BEST FOR diet.seed <---- STILL NOT GREAT THOUGH
+perLocation.spdf@data$diet.seed <- sqrt(diet.seed)
+```
+IDW
+```{r}
+idw <- gstat::idw(formula = perLocation.spdf@data$diet.seed ~ 1, locations = perLocation.spdf, newdata = grd, idp=2.0) 
+plot(idw)
+
+```
+
+
+#DIET.PLANTO TRANSFORMATIONS
+```{r}
+### Examining normality of the abundance and selected Sqrt transformation
+hist(diet.planto) 
+qqnorm(diet.planto)
+qqline(diet.planto)
+
+#hist(log(diet.planto)) 
+#qqnorm(log(diet.planto)) 
+#qqline(log(diet.planto))
+
+hist(sqrt(diet.planto))
+qqnorm(sqrt(diet.planto)) 
+qqline(sqrt(diet.planto))
+
+hist(asin(sqrt(diet.planto)))
+qqnorm(asin(sqrt(diet.planto)))
+qqline(asin(sqrt(diet.planto)))
+
+#hist(1/(diet.planto)) 
+#qqnorm(1/(diet.planto)) 
+#qqline(1/(diet.planto))
+
+
+### SQRT DIET IS BEST FOR diet.planto <---- STILL NOT GREAT THOUGH
+perLocation.spdf@data$diet.planto <- sqrt(diet.planto)
+```
+IDW
+```{r}
+idw <- gstat::idw(formula = perLocation.spdf@data$diet.planto ~ 1, locations = perLocation.spdf, newdata = grd, idp=2.0) 
+plot(idw)
+```
 
 ###Species Accumulation
 ```{r}
