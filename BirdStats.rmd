@@ -133,6 +133,73 @@ plot(idw)
 
 ```
 
+IDP vs IDW plots for Abundance
+
+```{r}
+library(raster)
+
+```
+
+```{r}
+idw_2 <- gstat::idw(formula = perLocation.spdf@data$transformedAbundance ~ 1, locations = perLocation.spdf, newdata = grd, idp=2.0) 
+idw_3 <- gstat::idw(formula = perLocation.spdf@data$transformedAbundance ~ 1, locations = perLocation.spdf, newdata = grd, idp=3.0) 
+idw_4 <- gstat::idw(formula = perLocation.spdf@data$transformedAbundance ~ 1, locations = perLocation.spdf, newdata = grd, idp=4.0) 
+
+
+par(mfrow=c(1,3))
+plot(idw_2)
+plot(idw_3)
+plot(idw_4)
+```
+```{r}
+# Leave-one-out validation routine
+IDW.out_2 <- vector(length = length(perLocation.spdf))
+for (i in 1:length(perLocation.spdf)) {
+  IDW.out_2[i] <- idw(abundance ~ 1, perLocation.spdf[-i,], perLocation.spdf[i,], idp=2.0)$var1.pred
+}
+
+# Leave-one-out validation routine
+IDW.out_3 <- vector(length = length(perLocation.spdf))
+for (i in 1:length(perLocation.spdf)) {
+  IDW.out_3[i] <- idw(abundance ~ 1, perLocation.spdf[-i,], perLocation.spdf[i,], idp=3.0)$var1.pred
+}
+
+# Leave-one-out validation routine
+IDW.out_4 <- vector(length = length(perLocation.spdf))
+for (i in 1:length(perLocation.spdf)) {
+  IDW.out_4[i] <- idw(abundance ~ 1, perLocation.spdf[-i,], perLocation.spdf[i,], idp=4.0)$var1.pred
+}
+```
+```{r}
+par(mfrow = c(1,3))
+
+# Plot the differences
+OP_2 <- par(pty="s", mar=c(4,3,0,0))
+  plot(IDW.out_2 ~ perLocation.spdf@data$abundance, asp=1, xlab="Observed", ylab="Predicted", pch=16,
+       col=rgb(0,0,0,0.5))
+  abline(lm(IDW.out_2 ~ perLocation.spdf@data$abundance), col="red", lw=2,lty=2)
+  abline(0,1)
+
+
+
+# Plot the differences
+OP_3 <- par(pty="s", mar=c(4,3,0,0))
+  plot(IDW.out_3 ~ perLocation.spdf@data$abundance, asp=1, xlab="Observed", ylab="Predicted", pch=16,
+       col=rgb(0,0,0,0.5))
+  abline(lm(IDW.out_3 ~ perLocation.spdf@data$abundance), col="red", lw=2,lty=2)
+  abline(0,1)
+
+
+
+# Plot the differences
+OP_4 <- par(pty="s", mar=c(4,3,0,0))
+  plot(IDW.out_4 ~ perLocation.spdf@data$abundance, asp=1, xlab="Observed", ylab="Predicted", pch=16,
+       col=rgb(0,0,0,0.5))
+  abline(lm(IDW.out_4 ~ perLocation.spdf@data$abundance), col="red", lw=2,lty=2)
+  abline(0,1)
+
+
+```
 
 #Species Richness 
 Transformation
@@ -164,7 +231,26 @@ idw <- gstat::idw(formula = perLocation.spdf@data$transformedRichness ~ 1, locat
 plot(idw)
 
 ```
+Jack Knife Analyses
+```{r}
+### TAKEN AND LIGHTLY MODIFIED FROM https://mgimond.github.io/Spatial/interpolation-in-r.html?fbclid=IwAR1oArLsu-JoSKIcZsUnAyu_eAhy6B9qFWG4BHjj8lLGLcYVxzSWdQ33oSs ###
 
+
+# Leave-one-out validation routine
+IDW.out.speciesRichness <- vector(length = length(perLocation.spdf))
+for (i in 1:length(perLocation.spdf)) {
+  IDW.out.speciesRichness[i] <- idw(speciesRichness ~ 1, perLocation.spdf[-i,], perLocation.spdf[i,], idp=4.0)$var1.pred
+}
+
+# Plot the differences
+OP.speciesRichness <- par(pty="s", mar=c(4,3,0,0))
+  plot(IDW.out.speciesRichness ~ perLocation.spdf@data$speciesRichness, asp=1, xlab="Observed", ylab="Predicted", pch=16,
+       col=rgb(0,0,0,0.5))
+  abline(lm(IDW.out.speciesRichness ~ perLocation.spdf@data$speciesRichness), col="red", lw=2,lty=2)
+  abline(0,1)
+par(OP.speciesRichness)
+
+```
 
 ###DIET ANALYSES
 
