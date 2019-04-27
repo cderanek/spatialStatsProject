@@ -9,7 +9,6 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-
 Remember that diet is small proxy. Some birds could eat more than others
 Moran's I to tell if birds are clustered. 
 Diversity analysis?
@@ -24,7 +23,8 @@ library(maptools) # provides various mapping functions
 library(RANN) # for nearest neighbor calculations
 library(gstat)
 library(base)
-
+library(leaflet)
+library(raster)
 ```
 
 ### READING IN DATA
@@ -37,21 +37,16 @@ environment<-read.csv("balbina_environmental_variables.csv", header = TRUE)
 ###DATA FORMATTING
 ```{r}
 noRecaptures <- subset(captureBirds, captureBirds$new.individual == "yes")
-
 perLocation<- as.data.frame(table(noRecaptures$site))
 perLocation$longitude<- environment$longitude.WGS84
 perLocation$latitude<- environment$latitude.WGS84
 perLocation$coverage<- environment$forest.cover.200
-
 names(perLocation)<- c("site", "abundance", "longitude", "latitude","coverage")
 str(perLocation)
-
 # create vectors to hold species richness and names to later add as cols to perLocation
 speciesRichnessBySite=vector('integer',length=length(perLocation$site))
 speciesNamesBySite=vector('list',length=length(perLocation$site))
-
 # get number of species at each site, list of species at each site
-# TODO FORMAT SUCH THAT WE MAKE READY FOR SPEC ACCUM - CARISSA TASK
 for (i in 1:length(perLocation$site)){
   siteName = perLocation$site[i]
   
@@ -72,7 +67,6 @@ for (i in 1:length(perLocation$site)){
   speciesNamesBySite[[i]] = speciesFreqs
   
 }
-
 # add species richness and names to perLocation
 perLocation$speciesRichness<- speciesRichnessBySite
 perLocation$speciesNamesL<- speciesNamesBySite
@@ -80,7 +74,7 @@ perLocation$speciesNamesL<- speciesNamesBySite
 
 
 
-###IDW ABUNDANCE, SPECIES RICHNESS - TODO ALICIA
+###IDW ABUNDANCE, SPECIES RICHNESS
 
 Creating a spatial points data frame
 ```{r}
@@ -91,35 +85,41 @@ class(perLocation.spdf)
 bbox(perLocation.spdf)
 ```
 
-#Abundance 
-Data Transformations
+#Data Transformation Function
 ```{r}
-### Examining normality of the abundance and selected Sqrt transformation
-hist(perLocation.spdf@data$abundance) ## Note abundance is not normally distributed. Should transform dataset
-qqnorm(perLocation.spdf@data$abundance)
-qqline(perLocation.spdf@data$abundance)
+### Make QQ plots for different transformations
+examineNormality = function(data) {
+  hist(data)
+  qqnorm(data)
+  qqline(data)
+  
+  hist(log(data),main='log')
+  qqnorm(log(data), main='log')
+  qqline(log(data))
+  
+  hist(sqrt(data),main='sqrt')
+  qqnorm(sqrt(data), main='sqrt')
+  qqline(sqrt(data))
+  
+  hist(1/data,main='1/y')
+  qqnorm(1/data, main='1/y')
+  qqline(1/data)
+}
 
-hist(log(perLocation.spdf@data$abundance)) ## Log Transformation --> still not great
-qqnorm(log(perLocation.spdf@data$abundance))
-qqline(log(perLocation.spdf@data$abundance))
-
-hist((sqrt(perLocation.spdf@data$abundance))) ## Sqrt Transformation ---> Transformation I am using
-qqnorm((sqrt(perLocation.spdf@data$abundance)))
-qqline((sqrt(perLocation.spdf@data$abundance)))
-
-hist(1/(perLocation.spdf@data$abundance)) ## 1/y Transformation --> real bad
-qqnorm(1/(perLocation.spdf@data$abundance)) 
-qqline(1/(perLocation.spdf@data$abundance))
-
-perLocation.spdf@data$transformedAbundance <- sqrt(perLocation.spdf@data$abundance)
 ```
-Inverse Distance Weighted
 
+# IDW Variables Setup
 ```{r}
-x.range <- as.numeric(c(-60, -59.15671))  # min/max longitude of the interpolation area
-y.range <- as.numeric(c(-1.97378, -1.32884))  # min/max latitude of the interpolation area
+# set range for interpolation area
+minLong = min(perLocation.spdf@coords[,1])
+maxLong = max(perLocation.spdf@coords[,1])
+minLat = min(perLocation.spdf@coords[,2])
+maxLat = max(perLocation.spdf@coords[,2])
 
+x.range <- as.numeric(c(minLong, maxLong))  # min/max longitude of the interpolation area
+y.range <- as.numeric(c(minLat, maxLat))  # min/max latitude of the interpolation area
 
+# make grid for idw
 grd <- expand.grid(x = seq(from = x.range[1], to = x.range[2], by = 0.001), y = seq(from = y.range[1], 
     to = y.range[2], by = 0.001))  # expand points to grid
 coordinates(grd) <- ~x + y
@@ -127,129 +127,87 @@ gridded(grd) <- TRUE
 plot(grd, cex = 1.5, col = "grey") 
 plot(perLocation.spdf, add=TRUE, pch = 1, col = "red", cex = 1)
 
-
-idw <- gstat::idw(formula = perLocation.spdf@data$transformedAbundance ~ 1, locations = perLocation.spdf, newdata = grd, idp=2.0) 
-plot(idw)
-
 ```
 
-IDP vs IDW plots for Abundance
-
+# IDW plot function
 ```{r}
-library(raster)
-
-```
-
-```{r}
-idw_2 <- gstat::idw(formula = perLocation.spdf@data$transformedAbundance ~ 1, locations = perLocation.spdf, newdata = grd, idp=2.0) 
-idw_3 <- gstat::idw(formula = perLocation.spdf@data$transformedAbundance ~ 1, locations = perLocation.spdf, newdata = grd, idp=3.0) 
-idw_4 <- gstat::idw(formula = perLocation.spdf@data$transformedAbundance ~ 1, locations = perLocation.spdf, newdata = grd, idp=4.0) 
-
-
-par(mfrow=c(1,3))
-plot(idw_2)
-plot(idw_3)
-plot(idw_4)
-```
-```{r}
-# Leave-one-out validation routine
-IDW.out_2 <- vector(length = length(perLocation.spdf))
-for (i in 1:length(perLocation.spdf)) {
-  IDW.out_2[i] <- idw(abundance ~ 1, perLocation.spdf[-i,], perLocation.spdf[i,], idp=2.0)$var1.pred
-}
-
-# Leave-one-out validation routine
-IDW.out_3 <- vector(length = length(perLocation.spdf))
-for (i in 1:length(perLocation.spdf)) {
-  IDW.out_3[i] <- idw(abundance ~ 1, perLocation.spdf[-i,], perLocation.spdf[i,], idp=3.0)$var1.pred
-}
-
-# Leave-one-out validation routine
-IDW.out_4 <- vector(length = length(perLocation.spdf))
-for (i in 1:length(perLocation.spdf)) {
-  IDW.out_4[i] <- idw(abundance ~ 1, perLocation.spdf[-i,], perLocation.spdf[i,], idp=4.0)$var1.pred
+plotIDW = function(desiredFormula, allDataSPDF, gridToInterpolate, idpRange, titleString) {
+  for (idpVal in idpRange) {
+    idw <- gstat::idw(formula = desiredFormula, locations = allDataSPDF, newdata = gridToInterpolate, idp=idpVal)
+    plot(idw, main=paste(titleString,' for IDP=',idpVal,sep=''))
+  }
 }
 ```
+
+
 ```{r}
-par(mfrow = c(1,3))
+jackknifeDiffIDP = function(allData, yVarData, yVarName, desiredFormula, idpRange) {
+  predValsL = performJackknifeDiffIDP(allData, yVarData, yVarName, desiredFormula, idpRange)
+  plotObsVPred(predValsL, yVarData, yVarName, idpRange)
+}
 
-# Plot the differences
-OP_2 <- par(pty="s", mar=c(4,3,0,0))
-  plot(IDW.out_2 ~ perLocation.spdf@data$abundance, asp=1, xlab="Observed", ylab="Predicted", pch=16,
-       col=rgb(0,0,0,0.5))
-  abline(lm(IDW.out_2 ~ perLocation.spdf@data$abundance), col="red", lw=2,lty=2)
-  abline(0,1)
+performJackknifeDiffIDP = function(allData, yVarData, yVarName, desiredFormula, idpRange) {
+  dataLen = length(allData)
+  # create a list to hold the lists of predicted vals
+  predValsL = replicate(length(idpRange),list())
+  # loop over all idp vals
+  for (j in 1:length(idpRange)) {
+    # get the list of all leave-one-out predicted vals for a particular IDP val
+    currIDP = idpRange[j]
+    IDW.pred = vector(length = dataLen)
+    for (i in 1:dataLen) {
+      IDW.pred[i] <- idw(desiredFormula, allData[-i,], allData[i,], idp=currIDP)$var1.pred
+    }
+    predValsL[[j]] = IDW.pred
+  }
+  return(predValsL)
+}
 
+plotObsVPred = function(predValsL, yVarData, yVarName, idpRange) {
+  idpLen = length(idpRange)
+  par(mfrow = c(1,idpLen))
+  
+  for (j in 1:length(idpRange)) {
+    currIDP = idpRange[j]
+    currPredVals = predValsL[[j]]
+    OP = par(pty="s", mar=c(4,3,2,0))
+    plot(currPredVals ~ yVarData, asp=1, xlab="Observed", ylab="Predicted", pch=16,
+       col=rgb(0,0,0,0.5), main=as.character(paste('IDP=',currIDP,sep='')))
+    abline(lm(currPredVals ~ yVarData), col="red", lw=2,lty=2)
+    abline(0,1)
+  }
+  mtext(as.character(paste(yVarName,"IDW Observed vs. Predicted",sep=' ')), outer=TRUE, line=-6)
+}
+```
+#Abundance
 
+```{r}
+#Transformation
+#examineNormality(perLocation.spdf@data$abundance) # <-- chose sqrt transformation as best
+perLocation.spdf@data$transformedAbundance <- sqrt(perLocation.spdf@data$abundance)
 
-# Plot the differences
-OP_3 <- par(pty="s", mar=c(4,3,0,0))
-  plot(IDW.out_3 ~ perLocation.spdf@data$abundance, asp=1, xlab="Observed", ylab="Predicted", pch=16,
-       col=rgb(0,0,0,0.5))
-  abline(lm(IDW.out_3 ~ perLocation.spdf@data$abundance), col="red", lw=2,lty=2)
-  abline(0,1)
+#IDW plots
+idpRange = seq(2,4,1)
+plotIDW(transformedAbundance~1, perLocation.spdf, grd, idpRange, 'IDW plot of sqrt(abundance)')
+idw_abundance_2 <- gstat::idw(formula = transformedAbundance~1, locations = perLocation.spdf, newdata = grd, idp=2)
 
-
-
-# Plot the differences
-OP_4 <- par(pty="s", mar=c(4,3,0,0))
-  plot(IDW.out_4 ~ perLocation.spdf@data$abundance, asp=1, xlab="Observed", ylab="Predicted", pch=16,
-       col=rgb(0,0,0,0.5))
-  abline(lm(IDW.out_4 ~ perLocation.spdf@data$abundance), col="red", lw=2,lty=2)
-  abline(0,1)
-
-
+#Jackknife analysis
+jackknifeDiffIDP(perLocation.spdf, perLocation.spdf@data$transformedAbundance, 'sqrt(sbundance)', transformedAbundance~1, idpRange)
 ```
 
 #Species Richness 
-Transformation
+
 ```{r}
-### Examining normality of the species richness and selected Sqrt transformation
-hist(perLocation.spdf@data$speciesRichness)
-qqnorm(perLocation.spdf$speciesRichness)
-qqline(perLocation.spdf$speciesRichness)
-
-hist(log(perLocation.spdf$speciesRichness)) 
-qqnorm(log(perLocation.spdf$speciesRichness)) 
-qqline(log(perLocation.spdf$speciesRichness))
-
-hist(sqrt(perLocation.spdf$speciesRichness)) 
-qqnorm(sqrt(perLocation.spdf$speciesRichness)) 
-qqline(sqrt(perLocation.spdf$speciesRichness))
-
-hist(1/(perLocation.spdf$speciesRichness)) 
-qqnorm(1/(perLocation.spdf$speciesRichness)) 
-qqline(1/(perLocation.spdf$speciesRichness))
-
+#Transformation
+#examineNormality(perLocation.spdf@data$speciesRichness)
 perLocation.spdf@data$transformedRichness <- sqrt(perLocation.spdf@data$speciesRichness)
-```
 
+#IDW plots
+idpRange = seq(2,4,1)
+plotIDW(transformedRichness~1, perLocation.spdf, grd, idpRange, 'IDW plot of sqrt(richness)')
 
-IDW
-```{r}
-idw <- gstat::idw(formula = perLocation.spdf@data$transformedRichness ~ 1, locations = perLocation.spdf, newdata = grd, idp=2.0) 
-plot(idw)
-
-```
-Jack Knife Analyses
-```{r}
-### TAKEN AND LIGHTLY MODIFIED FROM https://mgimond.github.io/Spatial/interpolation-in-r.html?fbclid=IwAR1oArLsu-JoSKIcZsUnAyu_eAhy6B9qFWG4BHjj8lLGLcYVxzSWdQ33oSs ###
-
-
-# Leave-one-out validation routine
-IDW.out.speciesRichness <- vector(length = length(perLocation.spdf))
-for (i in 1:length(perLocation.spdf)) {
-  IDW.out.speciesRichness[i] <- idw(speciesRichness ~ 1, perLocation.spdf[-i,], perLocation.spdf[i,], idp=4.0)$var1.pred
-}
-
-# Plot the differences
-OP.speciesRichness <- par(pty="s", mar=c(4,3,0,0))
-  plot(IDW.out.speciesRichness ~ perLocation.spdf@data$speciesRichness, asp=1, xlab="Observed", ylab="Predicted", pch=16,
-       col=rgb(0,0,0,0.5))
-  abline(lm(IDW.out.speciesRichness ~ perLocation.spdf@data$speciesRichness), col="red", lw=2,lty=2)
-  abline(0,1)
-par(OP.speciesRichness)
-
+#Jackknife analysis
+jackknifeDiffIDP(perLocation.spdf, perLocation.spdf@data$transformedRichness, 'sqrt(richness)', transformedRichness~1, idpRange)
 ```
 
 ###DIET ANALYSES
@@ -259,7 +217,6 @@ Data Wrangling
 dietL <- c("diet.inv", "diet.vend", "diet.vect", "diet.vfish","diet.vunk","diet.fruit","diet.nect","diet.seed","diet.planto")
 dietByRegion <- matrix(1:342, nrow = 38, ncol = 9)
 colnames(dietByRegion) <- dietL
-
 for (i in 1:38){ #num rows is each location
   for (j in 1:9){ #num cols is each diet type
     
@@ -285,7 +242,6 @@ for (i in 1:38){ #num rows is each location
         birdLocation = match(bird, birdInfo$wilman.2014)
       }
       foodEaten = food[birdLocation] #Perent of Diet for that particular bird
-
       sumDiet <- sumDiet + (numBirds * foodEaten)
       
     }
@@ -293,8 +249,8 @@ for (i in 1:38){ #num rows is each location
     dietByRegion[i,j] = sumDiet/ (100*individualCount)
   }
 }
-
 ```
+
 Separating by Diet Type
 ```{r}
 diet.inv <- dietByRegion[,1]
@@ -309,401 +265,200 @@ diet.planto <- dietByRegion[,9]
 ```
 
 #DIET.INV
-TRANSFORMATIONS
 ```{r}
+#Transformation
+#examineNormality(diet.inv)
+perLocation.spdf@data$diet.inv <- diet.inv ## UNTRANSFORMED DIET IS BEST FOR DIET.INV
 
-hist(diet.inv) 
-qqnorm(diet.inv)
-qqline(diet.inv)
+#IDW plots
+idpRange = seq(2,4,1)
+plotIDW(diet.inv~1, perLocation.spdf, grd, idpRange, 'IDW plot of diet.inv')
 
-hist(log(diet.inv))
-qqnorm(log(diet.inv)) 
-qqline(log(diet.inv))
-
-hist(sqrt(diet.inv))
-qqnorm(sqrt(diet.inv)) 
-qqline(sqrt(diet.inv))
-
-hist(1/(diet.inv)) 
-qqnorm(1/(diet.inv)) 
-qqline(1/(diet.inv))
-
-
-### UNTRANSFORMED DIET IS BEST FOR DIET.INV
-perLocation.spdf@data$diet.inv <- diet.inv
-```
-IDW
-```{r}
-idw <- gstat::idw(formula = perLocation.spdf@data$diet.inv ~ 1, locations = perLocation.spdf, newdata = grd, idp=2.0) 
-plot(idw)
-
+#Jackknife analysis
+jackknifeDiffIDP(perLocation.spdf, perLocation.spdf@data$diet.inv, 'diet.inv', diet.inv~1, idpRange)
 ```
 
 
 #DIET.VEND 
 TRANSFORMATIONS
 ```{r}
-hist(diet.vend) 
-qqnorm(diet.vend)
-qqline(diet.vend)
+#Transformation
+#examineNormality(diet.vend)
+perLocation.spdf@data$diet.vend <- diet.vend ## UNTRANSFORMED DIET IS BEST FOR DIET.VEND
 
-#hist(log(diet.vend)) 
-#qqnorm(log(diet.vend)) 
-#qqline(log(diet.vend))
+#IDW plots
+idpRange = seq(2,4,1)
+plotIDW(diet.vend~1, perLocation.spdf, grd, idpRange, 'IDW plot of diet.vend')
 
-hist(sqrt(diet.vend))
-qqnorm(sqrt(diet.vend)) 
-qqline(sqrt(diet.vend))
-
-hist(asin(sqrt(diet.vend)))
-qqnorm(asin(sqrt(diet.vend)))
-qqline(asin(sqrt(diet.vend)))
-
-#hist(1/(diet.vend)) 
-#qqnorm(1/(diet.vend)) 
-#qqline(1/(diet.vend))
-
-
-### UNTRANSFORMED DIET IS BEST FOR diet.vend <---- STILL NOT GREAT THOUGH
-perLocation.spdf@data$diet.vend <- diet.vend
-```
-IDW
-```{r}
-idw <- gstat::idw(formula = perLocation.spdf@data$diet.vend ~ 1, locations = perLocation.spdf, newdata = grd, idp=2.0) 
-plot(idw)
-
+#Jackknife analysis
+jackknifeDiffIDP(perLocation.spdf, perLocation.spdf@data$diet.vend, 'diet.vend', diet.vend~1, idpRange)
 ```
 
 
 #DIET.VECT 
 TRANSFORMATIONS
 ```{r}
-hist(diet.vect) 
-qqnorm(diet.vect)
-qqline(diet.vect)
-
-#hist(log(diet.vect)) 
-#qqnorm(log(diet.vect)) 
-#qqline(log(diet.vect))
-
-hist(sqrt(diet.vect))
-qqnorm(sqrt(diet.vect)) 
-qqline(sqrt(diet.vect))
-
-hist(asin(sqrt(diet.vect)))
-qqnorm(asin(sqrt(diet.vect)))
-qqline(asin(sqrt(diet.vect)))
-
-#hist(1/(diet.vect)) 
-#qqnorm(1/(diet.vect)) 
-#qqline(1/(diet.vect))
-
-
-### UNTRANSFORMED DIET IS BEST FOR diet.vect <---- STILL NOT GREAT THOUGH
+#Transformation
+#examineNormality(diet.vect)
 perLocation.spdf@data$diet.vect <- diet.vect
-```
-IDW
-```{r}
-idw <- gstat::idw(formula = perLocation.spdf@data$diet.vect ~ 1, locations = perLocation.spdf, newdata = grd, idp=2.0) 
-plot(idw)
 
+#IDW plots
+idpRange = seq(2,4,1)
+plotIDW(diet.vect~1, perLocation.spdf, grd, idpRange, 'IDW plot of diet.vect')
+
+#Jackknife analysis
+jackknifeDiffIDP(perLocation.spdf, perLocation.spdf@data$diet.vect, 'diet.vect', diet.vect~1, idpRange)
 ```
 
 
 #DET.VFISHD 
 TRANSORMATIONS
 ```{r}
-### Examining normality of the abundance and selected Sqrt transformation
-hist(diet.vfishd) 
-qqnorm(diet.vfishd)
-qqline(diet.vfishd)
-
-#hist(log(diet.vfishd)) 
-#qqnorm(log(diet.vfishd)) 
-#qqline(log(diet.vfishd))
-
-hist(sqrt(diet.vfishd))
-qqnorm(sqrt(diet.vfishd)) 
-qqline(sqrt(diet.vfishd))
-
-hist(asin(sqrt(diet.vfishd)))
-qqnorm(asin(sqrt(diet.vfishd)))
-qqline(asin(sqrt(diet.vfishd)))
-
-#hist(1/(diet.vfishd)) 
-#qqnorm(1/(diet.vfishd)) 
-#qqline(1/(diet.vfishd))
-
-
-### UNTRANSFORMED DIET IS BEST FOR diet.vfishd <---- STILL NOT GREAT THOUGH
+#Transformation
+#examineNormality(diet.vfishd)
 perLocation.spdf@data$diet.vfishd <- diet.vfishd
-```
-IDW
-```{r}
-idw <- gstat::idw(formula = perLocation.spdf@data$diet.vfishd ~ 1, locations = perLocation.spdf, newdata = grd, idp=2.0) 
-plot(idw)
 
+#IDW plots
+idpRange = seq(2,4,1)
+plotIDW(diet.vfishd~1, perLocation.spdf, grd, idpRange, 'IDW plot of diet.vfishd')
+idw_vfishd_2 <- gstat::idw(formula = diet.vfishd~1, locations = perLocation.spdf, newdata = grd, idp=2)
+
+#Jackknife analysis
+jackknifeDiffIDP(perLocation.spdf, perLocation.spdf@data$diet.vfishd, 'diet.vfishd', diet.vfishd~1, idpRange)
 ```
 
 
 #DIET.VUNK 
 TRANSFORMATIONS
 ```{r}
-### Examining normality of the abundance and selected Sqrt transformation
-hist(diet.vunk) 
-qqnorm(diet.vunk)
-qqline(diet.vunk)
-
-#hist(log(diet.vunk)) 
-#qqnorm(log(diet.vunk)) 
-#qqline(log(diet.vunk))
-
-hist(sqrt(diet.vunk))
-qqnorm(sqrt(diet.vunk)) 
-qqline(sqrt(diet.vunk))
-
-hist(asin(sqrt(diet.vunk)))
-qqnorm(asin(sqrt(diet.vunk)))
-qqline(asin(sqrt(diet.vunk)))
-
-#hist(1/(diet.vunk)) 
-#qqnorm(1/(diet.vunk)) 
-#qqline(1/(diet.vunk))
-
-
-### UNTRANSFORMED DIET IS BEST FOR diet.vunk <---- STILL NOT GREAT THOUGH
+#Transformation
+#examineNormality(diet.vunk)
 perLocation.spdf@data$diet.vunk <- diet.vunk
-```
-IDW
-```{r}
-idw <- gstat::idw(formula = perLocation.spdf@data$diet.vunk ~ 1, locations = perLocation.spdf, newdata = grd, idp=2.0) 
-plot(idw)
 
+#IDW plots
+idpRange = seq(2,4,1)
+plotIDW(diet.vunk~1, perLocation.spdf, grd, idpRange, 'IDW plot of diet.vunk')
+
+#Jackknife analysis
+jackknifeDiffIDP(perLocation.spdf, perLocation.spdf@data$diet.vunk, 'diet.vunk', diet.vunk~1, idpRange)
 ```
 
 
 #DIET.FRUIT 
 TRANSFORMATIONS
 ```{r}
-### Examining normality of the abundance and selected Sqrt transformation
-hist(diet.fruit) 
-qqnorm(diet.fruit)
-qqline(diet.fruit)
-
-#hist(log(diet.fruit)) 
-#qqnorm(log(diet.fruit)) 
-#qqline(log(diet.fruit))
-
-hist(sqrt(diet.fruit))
-qqnorm(sqrt(diet.fruit)) 
-qqline(sqrt(diet.fruit))
-
-hist(asin(sqrt(diet.fruit)))
-qqnorm(asin(sqrt(diet.fruit)))
-qqline(asin(sqrt(diet.fruit)))
-
-#hist(1/(diet.fruit)) 
-#qqnorm(1/(diet.fruit)) 
-#qqline(1/(diet.fruit))
-
-
-### UNTRANSFORMED DIET IS BEST FOR diet.fruit <---- STILL NOT GREAT THOUGH
+#Transformation
+#examineNormality(diet.fruit)
 perLocation.spdf@data$diet.fruit <- diet.fruit
-```
-IDW
-```{r}
-idw <- gstat::idw(formula = perLocation.spdf@data$diet.fruit ~ 1, locations = perLocation.spdf, newdata = grd, idp=2.0) 
-plot(idw)
+
+#IDW plots
+idpRange = seq(2,4,1)
+plotIDW(diet.fruit~1, perLocation.spdf, grd, idpRange, 'IDW plot of diet.fruit')
+
+#Jackknife analysis
+jackknifeDiffIDP(perLocation.spdf, perLocation.spdf@data$diet.fruit, 'diet.fruit', diet.fruit~1, idpRange)
 
 ```
 
 
 #DIET.NECT 
-TRANSFORMATIONS
 ```{r}
-### Examining normality of the abundance and selected Sqrt transformation
-hist(diet.nect) 
-qqnorm(diet.nect)
-qqline(diet.nect)
-
-#hist(log(diet.nect)) 
-#qqnorm(log(diet.nect)) 
-#qqline(log(diet.nect))
-
-hist(sqrt(diet.nect))
-qqnorm(sqrt(diet.nect)) 
-qqline(sqrt(diet.nect))
-
-hist(asin(sqrt(diet.nect)))
-qqnorm(asin(sqrt(diet.nect)))
-qqline(asin(sqrt(diet.nect)))
-
-#hist(1/(diet.nect)) 
-#qqnorm(1/(diet.nect)) 
-#qqline(1/(diet.nect))
-
-
-### UNTRANSFORMED DIET IS BEST FOR diet.nect <---- STILL NOT GREAT THOUGH
+#Transformation
+#examineNormality(diet.nect)
 perLocation.spdf@data$diet.nect <- diet.nect
-```
-IDW
-```{r}
-idw <- gstat::idw(formula = perLocation.spdf@data$diet.nect ~ 1, locations = perLocation.spdf, newdata = grd, idp=2.0) 
-plot(idw)
 
+#IDW plots
+idpRange = seq(2,4,1)
+plotIDW(diet.nect~1, perLocation.spdf, grd, idpRange, 'IDW plot of diet.nect')
+
+#Jackknife analysis
+jackknifeDiffIDP(perLocation.spdf, perLocation.spdf@data$diet.nect, 'diet.nect', diet.nect~1, idpRange)
 ```
 
 
 #DIET.SEED 
-TRANSFORMATIONS
 ```{r}
-### Examining normality of the abundance and selected Sqrt transformation
-hist(diet.seed) 
-qqnorm(diet.seed)
-qqline(diet.seed)
+#Transformation
+#examineNormality(diet.seed)
+perLocation.spdf@data$diet.seed <- diet.seed
 
-#hist(log(diet.seed)) 
-#qqnorm(log(diet.seed)) 
-#qqline(log(diet.seed))
+#IDW plots
+idpRange = seq(2,4,1)
+plotIDW(diet.seed~1, perLocation.spdf, grd, idpRange, 'IDW plot of diet.seed')
 
-hist(sqrt(diet.seed))
-qqnorm(sqrt(diet.seed)) 
-qqline(sqrt(diet.seed))
-
-hist(asin(sqrt(diet.seed)))
-qqnorm(asin(sqrt(diet.seed)))
-qqline(asin(sqrt(diet.seed)))
-
-#hist(1/(diet.seed)) 
-#qqnorm(1/(diet.seed)) 
-#qqline(1/(diet.seed))
-
-
-### SQRT DIET IS BEST FOR diet.seed <---- STILL NOT GREAT THOUGH
-perLocation.spdf@data$diet.seed <- sqrt(diet.seed)
-```
-IDW
-```{r}
-idw <- gstat::idw(formula = perLocation.spdf@data$diet.seed ~ 1, locations = perLocation.spdf, newdata = grd, idp=2.0) 
-plot(idw)
+#Jackknife analysis
+jackknifeDiffIDP(perLocation.spdf, perLocation.spdf@data$diet.seed, 'diet.seed', diet.seed~1, idpRange)
 
 ```
-
 
 #DIET.PLANTO TRANSFORMATIONS
 ```{r}
-### Examining normality of the abundance and selected Sqrt transformation
-hist(diet.planto) 
-qqnorm(diet.planto)
-qqline(diet.planto)
+#Transformation
+#examineNormality(diet.planto)
+perLocation.spdf@data$diet.planto <- diet.planto
 
-#hist(log(diet.planto)) 
-#qqnorm(log(diet.planto)) 
-#qqline(log(diet.planto))
+#IDW plots
+idpRange = seq(2,4,1)
+plotIDW(diet.planto~1, perLocation.spdf, grd, idpRange, 'IDW plot of diet.planto')
 
-hist(sqrt(diet.planto))
-qqnorm(sqrt(diet.planto)) 
-qqline(sqrt(diet.planto))
+#Jackknife analysis
+jackknifeDiffIDP(perLocation.spdf, perLocation.spdf@data$diet.planto, 'diet.planto', diet.planto~1, idpRange)
 
-hist(asin(sqrt(diet.planto)))
-qqnorm(asin(sqrt(diet.planto)))
-qqline(asin(sqrt(diet.planto)))
-
-#hist(1/(diet.planto)) 
-#qqnorm(1/(diet.planto)) 
-#qqline(1/(diet.planto))
-
-
-### SQRT DIET IS BEST FOR diet.planto <---- STILL NOT GREAT THOUGH
-perLocation.spdf@data$diet.planto <- sqrt(diet.planto)
-```
-IDW
-```{r}
-idw <- gstat::idw(formula = perLocation.spdf@data$diet.planto ~ 1, locations = perLocation.spdf, newdata = grd, idp=2.0) 
-plot(idw)
 ```
 
-###Species Accumulation
-```{r}
-#str(captureBirds)
-noRecaptures <- subset(captureBirds, captureBirds$new.individual == "yes")
-
-perLocation<- as.data.frame(table(noRecaptures$site))
-perLocation$longitude<- environment$longitude.WGS84
-perLocation$latitude<- environment$latitude.WGS84
-perLocation$coverage<- environment$forest.cover.200
-
-names(perLocation)<- c("site", "abundance", "longitude", "latitude","coverage")
-str(perLocation)
-
-# create vectors to hold species richness and names to later add as cols to perLocation
-speciesRichnessBySite=vector('integer',length=length(perLocation$site))
-speciesNamesBySite=vector('list',length=length(perLocation$site))
-
-# create matrix to pass into species accumulation curve formula
-allSpeciesNames = sort(unique(noRecaptures$species),return=TRUE)
-specAccumDF <- data.frame(matrix(ncol = length(allSpeciesNames), nrow = length(perLocation$site)))
-colnames(specAccumDF) <- allSpeciesNames
-row.names(specAccumDF) <- perLocation$site
-
-# get number of species at each site, list of species at each site
-for (i in 1:length(perLocation$site)){
-  siteName = perLocation$site[i]
-  
-  # operations to get T/F list of species at site
-  set<-subset(noRecaptures, site == siteName)
-  byLocation <- as.data.frame(table(set$species))
-  speciesFoundatSite = (byLocation$Freq != 0)
-  
-  # add speciesRichness to vector
-  speciesRichnessBySite[i] = sum(speciesFoundatSite)
-  speciesNamesBySite[i] = list(as.character(byLocation$Var1[speciesFoundatSite]))
-  
-  # update specAccumDF
-  byLocation[order(byLocation$Var1),] #makes sure things get inputted in correct order
-  specAccumDF[i,] = byLocation$Freq
-  
-}
-
-# add species richness and names to perLocation
-perLocation$speciesRichness<- speciesRichnessBySite
-perLocation$speciesNamesL<- speciesNamesBySite
-```
 
 ###BASEMAPS
 ```{r}
-library(leaflet)
-medLong = median(perLocation.spdf@coords[,1])
-medLat = median(perLocation.spdf@coords[,2])
-
-abundanceVals=sort(perLocation.spdf@data$abundance)
-lowerQuarterAbundance = abundanceVals[floor(length(abundanceVals)/4)]
-upperQuarterAbundance = abundanceVals[length(abundanceVals)-floor(length(abundanceVals)/4)]
-
-getColor <- function(df) {
-  sapply(df$abundance, function(abundance) {
-  if(abundance <= lowerQuarterAbundance) {
-    "red"
-  } else if(abundance <= upperQuarterAbundance) {
-    "orange"
-  } else {
-    "green"
-  } })
+makeMap <- function(markerVals, idw, markerName, idwName, transformFormula) {
+  medLong = median(perLocation.spdf@coords[,1])
+  medLat = median(perLocation.spdf@coords[,2])
+  
+  markerVals=sort(markerVals)
+  lowerQuarter = markerVals[floor(length(markerVals)/4)]
+  upperQuarter = markerVals[length(markerVals)-floor(length(markerVals)/4)]
+  
+  getColor <- function(markerVals) {
+    sapply(markerVals, function(currVal) {
+    if(currVal <= lowerQuarter) {
+      "#FFFFCC"
+    } else if(currVal <= upperQuarter) {
+      "#41B6C4"
+    } else {
+      "#0C2C84"
+    } })
+  }
+  
+  icons <- awesomeIcons(
+    icon = 'ios-close',
+    iconColor = getColor(markerVals),
+    library = 'ion',
+    markerColor = 'white'
+  )
+  
+  # get idw to overlay
+  r = raster(idw)
+  crs(r) <- sp::CRS("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs")
+  pal <- colorNumeric(c("#FFFFCC", "#41B6C4", "#0C2C84"), values(r),
+    na.color = "transparent")
+  
+  # draw map
+  m = leaflet(perLocation.spdf) %>% setView(lng = medLong, lat = medLat, zoom = 10)
+  m %>% addTiles() %>% addAwesomeMarkers(icon=icons, label = as.character(markerName), popup=~as.character(site)) %>%
+    addRasterImage(r, colors = pal, opacity = 0.8) %>%
+    addLegend(pal = pal, values = values(r), labFormat = labelFormat(transform = transformFormula),
+      title = idwName)
 }
 
-icons <- awesomeIcons(
-  icon = 'ios-close',
-  iconColor = 'black',
-  library = 'ion',
-  markerColor = getColor(perLocation.spdf@data)
-)
-
-
-# draw map
-m = leaflet(perLocation.spdf) %>% setView(lng = medLong, lat = medLat, zoom = 10)
-m %>% addTiles() %>% addAwesomeMarkers(icon=icons, label = ~as.character(abundance), popup=~as.character(site))
 
 ```
+
+# Make Basemaps
+```{r}
+#makeMap(perLocation.spdf@data$transformedAbundance, idw_abundance_2, perLocation.spdf@data$abundance, 'abundance',function(x) x^2)
+makeMap(perLocation.spdf@data$diet.vfishd, idw_vfishd_2, perLocation.spdf@data$diet.vfishd, 'diet.vfishd',function(x) x)
+
+```
+
 ### Moran's I Analyses
 ```{r}
 centroids <- coordinates(perLocation.spdf)
