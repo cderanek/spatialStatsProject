@@ -704,3 +704,15 @@ m = leaflet(perLocation.spdf) %>% setView(lng = medLong, lat = medLat, zoom = 10
 m %>% addTiles() %>% addAwesomeMarkers(icon=icons, label = ~as.character(abundance), popup=~as.character(site))
 
 ```
+### Moran's I Analyses
+```{r}
+centroids <- coordinates(perLocation.spdf)
+delauney_Scot <- tri2nb(centroids)
+summary(delauney_Scot)
+SOI_Scot<-graph2nb(soi.graph(delauney_Scot,centroids))
+summary(SOI_Scot)
+
+contig_listw <- nb2listw(SOI_Scot, style="B", zero.policy=TRUE) 
+moran.test(perLocation.spdf@data$abundance, listw = contig_listw, zero.policy = TRUE)
+moran.test(perLocation.spdf@data$speciesRichness, listw = contig_listw, zero.policy = TRUE)
+```
